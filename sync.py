@@ -18,6 +18,8 @@ from time import time
 class BaseSocketLoop:
     """Base context for event loops using sockets."""
 
+    bufsize = 4096  # NOTE: this may be too big, we can fine tune it
+
     def __init__(self):
         """Initialize the event loop."""
         self.loop = asyncio.new_event_loop()
@@ -49,9 +51,15 @@ class BaseSocketLoop:
 
     @staticmethod
     def socket(*args, **kwargs):
-        """Create a socket."""
+        """
+        Create a non-blocking socket.
+
+        A non-blocking socket is required by the event loop:
+        https://docs.python.org/3/library/asyncio-eventloop.html#low-level-socket-operations
+        """
         sock = socket.socket(*args, **kwargs)
         sock.setblocking(False)
+        # Allow rebind to the port if it wasn't closed properly...
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         return sock
 
@@ -65,22 +73,31 @@ class BaseSocketLoop:
 
     async def recv(self, sock):
         """Receive data from the socket."""
-        packet = await self.loop.sock_recv(sock, 4096)
+        packet = await self.loop.sock_recv(sock, self.bufsize)
         return self.decode(packet)
 
     def recvfrom(self, sock, future=None):
-        """Receive data from the socket."""
+        """
+        Receive data from the socket.
+
+        The asyncio module did not implement a coroutine for socket.recvfrom,
+        so here it is.
+
+        A slight modification from:
+        https://www.pythonsheets.com/notes/python-asyncio.html#simple-asyncio-udp-echo-server
+        """
+        loop = self.loop
+
         fileno = sock.fileno()
         if future is None:
             future = self.loop.create_future()
         else:
-            self.loop.remove_reader(fileno)
+            loop.remove_reader(fileno)
 
         try:
-            packet, address = sock.recvfrom(4096)
+            packet, address = sock.recvfrom(self.bufsize)
         except (BlockingIOError, InterruptedError):
-            self.loop.add_reader(fileno,
-                                 self.recvfrom, sock, future)
+            loop.add_reader(fileno, self.recvfrom, sock, future)
         else:
             data = self.decode(packet)
             future.set_result((data, address))
@@ -93,12 +110,22 @@ class BaseSocketLoop:
         return self.loop.sock_sendall(sock, packet)
 
     def sendto(self, sock, data, address, future=None):
-        """Send data to the socket."""
+        """
+        Send data to the socket.
+
+        The asyncio module did not implement a coroutine for socket.sendto, so
+        here it is.
+
+        A slight modification from:
+        https://www.pythonsheets.com/notes/python-asyncio.html#simple-asyncio-udp-echo-server
+        """
+        loop = self.loop
+
         fileno = sock.fileno()
         if future is None:
-            future = self.loop.create_future()
+            future = loop.create_future()
         else:
-            self.loop.remove_writer(fileno)
+            loop.remove_writer(fileno)
 
         if not data:
             return
@@ -107,8 +134,7 @@ class BaseSocketLoop:
             packet = self.encode(data)
             nbytes = sock.sendto(packet, address)
         except (BlockingIOError, InterruptedError):
-            self.loop.add_writer(fileno,
-                                 self.sendto, sock, data, address, future)
+            loop.add_writer(fileno, self.sendto, sock, data, address, future)
         else:
             future.set_result(nbytes)
 
