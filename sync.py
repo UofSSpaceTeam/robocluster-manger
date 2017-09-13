@@ -2,6 +2,8 @@
 Sync module for robocluster process manager.
 
 Implements a context managers for the process manager server and for services.
+
+Each node should run 1 server, and many services.
 """
 
 __author__ = 'Jarrod Pas <j.pas@usask.ca>'
@@ -169,50 +171,7 @@ class JSONSocketLoop(BaseSocketLoop):
         return json.dumps(packet).encode('utf-8')
 
 
-class Server(JSONSocketLoop):
-    """Server to keep track of services."""
-
-    def __init__(self, subnet, port):
-        """Initialize server."""
-        super().__init__()
-
-        self.broadcast = ip_network(subnet).broadcast_address.compressed
-        self.port = port
-
-    def run(self):
-        """Run event loop forever."""
-        self.loop.create_task(self.discover())
-        self.loop.create_task(self.server())
-        super().run()
-
-    async def discover(self):
-        """Loop for discovering services."""
-        with self.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            sock.bind((self.broadcast, self.port))
-            while True:
-                data, address = await self.recvfrom(sock)
-                if data:
-                    print(f'discover: {address} > {data}')
-
-    async def server(self):
-        """Loop for serving requests for where services reside."""
-        with self.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.bind(('localhost', self.port))
-            sock.listen()
-            while True:
-                conn, address = await self.accept(sock)
-                self.loop.create_task(self.handler(conn, address))
-
-    async def handler(self, conn, address):
-        """Handle request for services."""
-        with conn:
-            data = await self.recv(conn)
-            if data:
-                print(f'handle: {address} > {data}')
-
-
-class Service(JSONSocketLoop):
+class ServiceLoop(JSONSocketLoop):
     """Service for the server to track."""
 
     def __init__(self, subnet, port):
@@ -238,9 +197,54 @@ class Service(JSONSocketLoop):
             await asyncio.sleep(1)
 
 
+class ServerLoop(JSONSocketLoop):
+    """Server to keep track of services."""
+
+    def __init__(self, subnet, port):
+        """Initialize server."""
+        super().__init__()
+
+        self.address = ip_network(subnet).broadcast_address.compressed, port
+        print(self.address)
+
+    def run(self):
+        """Run event loop forever."""
+        self.loop.create_task(self.discover())
+        self.loop.create_task(self.server())
+        super().run()
+
+    async def discover(self):
+        """Loop for discovering services."""
+        with self.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            sock.bind(self.address)
+            while True:
+                data, address = await self.recvfrom(sock)
+                if not data:
+                    continue
+                print(f'discover: {address} > {data}')
+
+    async def server(self):
+        """Loop for serving requests for where services reside."""
+        with self.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(('localhost', self.address[1]))
+            sock.listen()
+            while True:
+                conn, address = await self.accept(sock)
+                self.loop.create_task(self.handler(conn, address))
+
+    async def handler(self, conn, address):
+        """Handle request for services."""
+        with conn:
+            data = await self.recv(conn)
+            if not data:
+                return
+            print(f'handle: {address} > {data}')
+
+
 def server(args):
     """Run a server."""
-    with Server(args.subnet, args.port) as server_:
+    with ServerLoop(args.subnet, args.port) as server_:
         try:
             server_.run()
         except KeyboardInterrupt:
@@ -249,7 +253,7 @@ def server(args):
 
 def service(args):
     """Run a service."""
-    with Service(args.subnet, args.port) as service_:
+    with ServiceLoop(args.subnet, args.port) as service_:
         try:
             service_.run()
         except KeyboardInterrupt:
