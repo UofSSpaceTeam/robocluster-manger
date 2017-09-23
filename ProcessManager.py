@@ -83,11 +83,13 @@ class ProcessManager:
         return len(self.processes) == 0
 
     def loadConfig(self, file_name):
+        """Loads process configuration from a file"""
         if not isinstance(file_name, str):
             raise TypeError("Path to config file must be a string")
         with open(file_name) as file:
             config = json.load(file)
             local_processes = config['localhost']
+            # Start all process to be run on the local machine
             for name in local_processes:
                 try:
                     self.createProcess(name, local_processes[name]['cmd'])
