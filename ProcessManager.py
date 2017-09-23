@@ -66,13 +66,8 @@ class ProcessManager:
         """Initialize a process manager."""
         self.processes = {}  # store processes by name
         if config_file:
-            if not isinstance(config_file, str):
-                raise TypeError("Path to config file must be a string")
-            with open(config_file) as file:
-                config = json.load(file)
-                print(config)
-                for name in config['localhost']:
-                    self.createProcess(name, config['localhost'][name]['cmd'])
+            self.loadConfig(config_file)
+
 
     def __enter__(self):
         """Enter context manager."""
@@ -86,6 +81,22 @@ class ProcessManager:
     def isEmpty(self):
         """Return if processes is empty."""
         return len(self.processes) == 0
+
+    def loadConfig(self, file_name):
+        if not isinstance(file_name, str):
+            raise TypeError("Path to config file must be a string")
+        with open(file_name) as file:
+            config = json.load(file)
+            local_processes = config['localhost']
+            for name in local_processes:
+                try:
+                    self.createProcess(name, local_processes[name]['cmd'])
+                except KeyError:
+                    print('''Please use the following format:
+"localhost" : {
+    "process1": {"cmd" : "python program1.py"}
+}
+                            ''')
 
     def createProcess(self, name, command):
         """
