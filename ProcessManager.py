@@ -1,9 +1,10 @@
 """THIS FILE IS SUBJECT TO THE LICENSE TERMS GRANTED BY THE UNIVERSITY OF SASKATCHEWAN SPACE TEAM (USST)."""
 
+import json  # For reading configuration files
 import shlex
 from subprocess import Popen
+from textwrap import dedent
 from time import sleep
-import json  # For reading configuration files
 
 class RoboProcess:
     """Manages and keeps track of a process."""
@@ -89,16 +90,17 @@ class ProcessManager:
         with open(file_name) as file:
             config = json.load(file)
             local_processes = config['localhost']
-            # Start all process to be run on the local machine
+            # Create all processes to be run on the local machine
             for name in local_processes:
                 try:
                     self.createProcess(name, local_processes[name]['cmd'])
                 except KeyError:
-                    print('''Please use the following format:
-"localhost" : {
-    "process1": {"cmd" : "python program1.py"}
-}
-                            ''')
+                    print(dedent('''\
+                    Please use the following format:
+                    "localhost" : {
+                        "process1": {"cmd" : "python program1.py"}
+                    }\
+                    '''))
 
     def createProcess(self, name, command):
         """
