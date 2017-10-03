@@ -1,0 +1,6 @@
+# Example configuration file
+localhost:
+    sleeper:
+        cmd: "python sleeper.py"
+    crash:
+        cmd: "python crash.py"

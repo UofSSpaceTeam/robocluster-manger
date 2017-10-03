@@ -1,11 +1,12 @@
 """THIS FILE IS SUBJECT TO THE LICENSE TERMS GRANTED BY THE UNIVERSITY OF SASKATCHEWAN SPACE TEAM (USST)."""
 
-import json  # For reading configuration files
 import shlex
 import socket
 from subprocess import Popen
 from textwrap import dedent
 from time import sleep
+
+from ruamel.yaml import YAML # for reading configuraton files
 
 class RoboProcess:
     """Manages and keeps track of a process."""
@@ -86,10 +87,11 @@ class ProcessManager:
 
     def loadConfig(self, file_name):
         """Loads process configuration from a file"""
+        yaml_reader = YAML()
         if not isinstance(file_name, str):
             raise TypeError("Path to config file must be a string")
         with open(file_name) as file:
-            config = json.load(file)
+            config = yaml_reader.load(file)
             local_processes = {}
             if 'localhost' in config:
                 local_processes.update(config['localhost'])
@@ -101,10 +103,11 @@ class ProcessManager:
                     self.createProcess(name, local_processes[name]['cmd'])
                 except KeyError:
                     print(dedent('''\
-                    Please use the following format:
-                    "localhost" : {
-                        "process1": {"cmd" : "python program1.py"}
-                    }\
+                    Please use the following format for configuration:
+                    "localhost" :
+                        "process1":
+                            "cmd" : "python program1.py"
+                    \
                     '''))
 
     def createProcess(self, name, command):
@@ -156,7 +159,7 @@ class ProcessManager:
 def main():
     """Run a process manager in the foreground."""
 
-    with ProcessManager("config.json") as manager:
+    with ProcessManager("config.yaml") as manager:
         manager.start()
 
         try:
