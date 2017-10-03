@@ -1,9 +1,12 @@
 """THIS FILE IS SUBJECT TO THE LICENSE TERMS GRANTED BY THE UNIVERSITY OF SASKATCHEWAN SPACE TEAM (USST)."""
 
 import shlex
-import sys
+import socket
 from subprocess import Popen
+from textwrap import dedent
 from time import sleep
+
+from ruamel.yaml import YAML # for reading configuraton files
 
 class RoboProcess:
     """Manages and keeps track of a process."""
@@ -62,9 +65,12 @@ class ProcessManager:
     responding.
     """
 
-    def __init__(self):
+    def __init__(self, config_file):
         """Initialize a process manager."""
         self.processes = {}  # store processes by name
+        if config_file:
+            self.loadConfig(config_file)
+
 
     def __enter__(self):
         """Enter context manager."""
@@ -78,6 +84,31 @@ class ProcessManager:
     def isEmpty(self):
         """Return if processes is empty."""
         return len(self.processes) == 0
+
+    def loadConfig(self, file_name):
+        """Loads process configuration from a file"""
+        yaml_reader = YAML()
+        if not isinstance(file_name, str):
+            raise TypeError("Path to config file must be a string")
+        with open(file_name) as file:
+            config = yaml_reader.load(file)
+            local_processes = {}
+            if 'localhost' in config:
+                local_processes.update(config['localhost'])
+            if socket.gethostname() in config:
+                local_processes.update(config[socket.gethostname()])
+            # Create all processes to be run on the local machine
+            for name in local_processes:
+                try:
+                    self.createProcess(name, local_processes[name]['cmd'])
+                except KeyError:
+                    print(dedent('''\
+                    Please use the following format for configuration:
+                    "localhost" :
+                        "process1":
+                            "cmd" : "python program1.py"
+                    \
+                    '''))
 
     def createProcess(self, name, command):
         """
@@ -127,16 +158,8 @@ class ProcessManager:
 
 def main():
     """Run a process manager in the foreground."""
-    process_names = [
-        ["sleep", "python sleeper.py"],
-        ["crash", "python crash.py"],
-    ]
 
-    with ProcessManager() as manager:
-        """Initialize all the processes"""
-        for proc in process_names:
-            manager.createProcess(*proc)
-
+    with ProcessManager("config.yaml") as manager:
         manager.start()
 
         try:
