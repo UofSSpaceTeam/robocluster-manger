@@ -2,6 +2,7 @@
 
 import json  # For reading configuration files
 import shlex
+import socket
 from subprocess import Popen
 from textwrap import dedent
 from time import sleep
@@ -89,7 +90,11 @@ class ProcessManager:
             raise TypeError("Path to config file must be a string")
         with open(file_name) as file:
             config = json.load(file)
-            local_processes = config['localhost']
+            local_processes = {}
+            if 'localhost' in config:
+                local_processes.update(config['localhost'])
+            if socket.gethostname() in config:
+                local_processes.update(config[socket.gethostname()])
             # Create all processes to be run on the local machine
             for name in local_processes:
                 try:
